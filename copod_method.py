@@ -1,12 +1,11 @@
 from sqlalchemy import create_engine, delete
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import declarative_base
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Float
 from pyod.models.copod import COPOD
 import pandas as pd
 import os
 from dotenv import load_dotenv
-
 
 load_dotenv()
 
@@ -31,6 +30,8 @@ class MyTable(Base):
     flat_id = Column(Integer)
     name = Column(String)
     price = Column(Integer)
+    area_total = Column(Float)
+    room_count = Column(Integer)
 
 
 Base.metadata.create_all(engine)
@@ -38,35 +39,36 @@ Base.metadata.create_all(engine)
 # Fetch data from your table
 query = "SELECT * FROM kyiv_apartments"
 df = pd.read_sql(query, engine)
+train_df = pd.read_csv('kyiv_apartments.csv')
+train_df = train_df[['price']]
 
-if 'price' in df.columns:
-    # Select only the 'price' column for anomaly detection
-    numeric_df = df[['price']]
+numeric_df = df[['price']]
 
-    # Initialize the COPOD model
-    clf = COPOD()
-    clf.fit(numeric_df.values)
+# Initialize the COPOD model
+clf = COPOD(contamination=0.01)
+clf.fit(train_df.values)
 
-    # Get the prediction labels (0 for inliers, 1 for outliers)
-    labels = clf.labels_
+# Get the prediction labels (0 for inliers, 1 for outliers)
 
-    # Add the labels to the original dataframe
-    df['anomaly'] = labels
+labels = clf.predict(numeric_df.values)
 
-    # Identify anomalies
-    anomalies = df[df['anomaly'] == 1]
+# Add the labels to the original dataframe
+df['anomaly'] = labels
 
-    # Get the IDs of the anomalies
-    anomaly_ids = anomalies['id'].tolist()
-    print("Anomalies id: ", anomaly_ids)
+# Identify anomalies
+anomalies = df[df['anomaly'] == 1]
+
+# Get the IDs of the anomalies
+anomaly_ids = anomalies['id'].tolist()
+print("Anomalies id: ", anomaly_ids)
 
 # Identify duplicate entries based on 'id'
-duplicate_ids = df[df.duplicated(subset=['flat_id'], keep=False)]
+duplicate_ids = df[df.duplicated(subset=['flat_id'])]
 duplicate_ids = duplicate_ids['id'].tolist()
 print("Duplicates id: ", duplicate_ids)
 
 # Combine anomaly and duplicate IDs
-all_ids_to_delete = list(set(anomaly_ids + duplicate_ids))
+all_ids_to_delete = list(set(duplicate_ids + anomaly_ids))
 
 if all_ids_to_delete:
     # Perform the delete operation
