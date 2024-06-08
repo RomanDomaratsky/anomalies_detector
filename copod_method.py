@@ -28,7 +28,9 @@ Base = declarative_base()
 class MyTable(Base):
     __tablename__ = 'kyiv_apartments'
     id = Column(Integer, primary_key=True)
+    flat_id = Column(Integer)
     name = Column(String)
+    price = Column(Integer)
 
 
 Base.metadata.create_all(engine)
@@ -37,27 +39,39 @@ Base.metadata.create_all(engine)
 query = "SELECT * FROM kyiv_apartments"
 df = pd.read_sql(query, engine)
 
-# Select only numeric columns for the anomaly detection
-numeric_df = df.select_dtypes(include=[float, int])
+if 'price' in df.columns:
+    # Select only the 'price' column for anomaly detection
+    numeric_df = df[['price']]
 
-# Initialize the COPOD model
-clf = COPOD()
-clf.fit(numeric_df.values)
+    # Initialize the COPOD model
+    clf = COPOD()
+    clf.fit(numeric_df.values)
 
-# Get the prediction labels (0 for inliers, 1 for outliers)
-labels = clf.labels_
+    # Get the prediction labels (0 for inliers, 1 for outliers)
+    labels = clf.labels_
 
-# Add the labels to original dataframe
-df['anomaly'] = labels
+    # Add the labels to the original dataframe
+    df['anomaly'] = labels
 
-# Identify anomalies
-anomalies = df[df['anomaly'] == 1]
+    # Identify anomalies
+    anomalies = df[df['anomaly'] == 1]
 
-# Get the IDs of the anomalies
-anomaly_ids = anomalies['id'].tolist()
+    # Get the IDs of the anomalies
+    anomaly_ids = anomalies['id'].tolist()
+    print("Anomalies id: ", anomaly_ids)
 
-# Perform the delete operation
-stmt = delete(MyTable).where(MyTable.id.in_(anomaly_ids))
-session.execute(stmt)
-session.commit()
+# Identify duplicate entries based on 'id'
+duplicate_ids = df[df.duplicated(subset=['flat_id'], keep=False)]
+duplicate_ids = duplicate_ids['id'].tolist()
+print("Duplicates id: ", duplicate_ids)
 
+# Combine anomaly and duplicate IDs
+all_ids_to_delete = list(set(anomaly_ids + duplicate_ids))
+
+if all_ids_to_delete:
+    # Perform the delete operation
+    stmt = delete(MyTable).where(MyTable.id.in_(all_ids_to_delete))
+    session.execute(stmt)
+    session.commit()
+
+session.close()
