@@ -60,11 +60,13 @@ anomalies = df[df['anomaly'] == 1]
 
 # Get the IDs of the anomalies
 anomaly_ids = anomalies['id'].tolist()
+print("Number of anomalies to delete: ", len(anomaly_ids))
 print("Anomalies id: ", anomaly_ids)
 
 # Identify duplicate entries based on 'id'
 duplicate_ids = df[df.duplicated(subset=['flat_id'])]
 duplicate_ids = duplicate_ids['id'].tolist()
+print("Number of duplicates to delete: ", len(duplicate_ids))
 print("Duplicates id: ", duplicate_ids)
 
 # Combine anomaly and duplicate IDs
